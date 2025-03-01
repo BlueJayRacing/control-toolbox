@@ -30,16 +30,16 @@ Licensed under the BSD-2 license (see LICENSE file in main directory)
 #include <unsupported/Eigen/MatrixFunctions>
 
 // Declarations
-#include "Common"
-#include "Types"
-#include "Control"
-#include "Systems"
-#include "Integration"
-#include "Geometry"
-#include "Internal"
-#include "Math"
-#include "Simulation"
-#include "Switching"
+#include "Commonh"
+#include "Typesh"
+#include "Controlh"
+#include "Systemsh"
+#include "Integrationh"
+#include "Geometryh"
+#include "Internalh"
+#include "Mathh"
+#include "Simulationh"
+#include "Switchingh"
 
 #include "templateDir.h"
 

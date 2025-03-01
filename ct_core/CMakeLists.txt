@@ -271,7 +271,7 @@ else()
     )
 
     # Export dependencies for downstream packages
-    ament_export_include_directories(include)
+    ament_export_include_directories(include include/ct/core)
     
     # Export actual library targets - ct_core_impl will be named ct_core when installed
     ament_export_libraries(ct_plot ct_core ${PRESPEC_LIB_NAMES})
