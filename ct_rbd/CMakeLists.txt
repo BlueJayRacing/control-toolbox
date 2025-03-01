@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 # Determine if we're being built with colcon/ROS2
 if(DEFINED ENV{AMENT_PREFIX_PATH})
@@ -132,7 +132,7 @@ else()
 
     # Export dependencies for downstream packages
     ament_export_include_directories(include)
-    ament_export_libraries(ct_rbd)
+    # ament_export_libraries(ct_rbd)
     ament_export_targets(export_ct_rbd)
     
     # Export dependencies
