@@ -1,4 +1,16 @@
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required(VERSION 3.5)
+
+# Determine if we're being built with colcon/ROS2
+if(DEFINED ENV{AMENT_PREFIX_PATH})
+  set(USING_AMENT TRUE)
+else()
+  set(USING_AMENT FALSE)
+endif()
+
+# If using ament, find ament package
+if(USING_AMENT)
+  find_package(ament_cmake REQUIRED)
+endif()
 
 if(NOT TARGET clang-format)
 	include(${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/compilerSettings.cmake)
@@ -15,7 +27,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wfatal-errors -std=c++14 -Wall -Wno-unk
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
 if(NOT TARGET ${ct_rbd})
-	find_package(ct_rbd REQUIRED)
+	if(USING_AMENT)
+		find_package(ct_rbd REQUIRED)
+	else()
+		find_package(ct_rbd REQUIRED)
+	endif()
 endif()
 find_package(Boost REQUIRED system filesystem)
 
@@ -35,6 +51,7 @@ set(ct_models_target_include_dirs
 
 ## define placeholder for ct model libraries
 set(CT_MODELS_LIBRARIES "")
+set(CT_MODELS_BINARIES "")
 
 set(IP_CODEGEN_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/ct/models/InvertedPendulum/codegen")
 set(HYA_CODEGEN_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/ct/models/HyA/codegen")
@@ -230,46 +247,76 @@ endif()
 ###########
 
 if(BUILD_TESTS)
-    #find_package(GTest QUIET)
     enable_testing()
     add_subdirectory(test)
 endif()
 
 
-#################
-# INSTALLATION  #
-#################
+##########################################
+# INSTALLATION - TRADITIONAL CMAKE BUILD #
+##########################################
+if(NOT USING_AMENT)
+    # for correct libraries locations across platforms
+    include(GNUInstallDirs)
 
-# for correct libraries locations across platforms
-include(GNUInstallDirs)
+    ## copy the header files
+    install(DIRECTORY include/ct/models DESTINATION include/ct)
 
-## copy the header files
-install(DIRECTORY include/ct/models DESTINATION include/ct)
+    ## copy the cmake files required for find_package()
+    install(FILES "cmake/ct_modelsConfig.cmake" DESTINATION "share/ct_models/cmake")
 
-## copy the cmake files required for find_package()
-install(FILES "cmake/ct_modelsConfig.cmake" DESTINATION "share/ct_models/cmake")
+    ## install library and targets
+    install(
+        TARGETS ${CT_MODELS_LIBRARIES} ${CT_MODELS_BINARIES}
+        EXPORT ct_models_export
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/ct_models
+        )
 
-## install library and targets
-install(
-    TARGETS ${CT_MODELS_LIBRARIES} ${CT_MODELS_BINARIES}
-    EXPORT ct_models_export
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/ct_models
+    ## create the ct_models.cmake file which holds target includes and dependencies
+    install(EXPORT ct_models_export DESTINATION share/ct_models/cmake)
+
+    ## add uninstall target
+    if(NOT TARGET uninstall)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/cmake_uninstall.cmake.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake"
+            IMMEDIATE @ONLY)
+
+        add_custom_target(uninstall
+            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake)
+    endif()
+
+###############################
+# INSTALLATION - AMENT/COLCON #
+###############################
+else()
+    # Install header files for ROS2
+    install(DIRECTORY include/ct/models DESTINATION include/ct)
+
+    # Install libraries for ROS2
+    install(
+        TARGETS ${CT_MODELS_LIBRARIES} ${CT_MODELS_BINARIES}
+        EXPORT export_ct_models
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION lib/ct_models
     )
 
-## create the ct_models.cmake file which holds target includes and dependencies
-install (EXPORT ct_models_export DESTINATION share/ct_models/cmake)
-
-## add uninstall target
-if(NOT TARGET uninstall)
-    configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/cmake_uninstall.cmake.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake"
-        IMMEDIATE @ONLY)
-
-    add_custom_target(uninstall
-        COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake)
+    # Export dependencies for downstream packages
+    ament_export_include_directories(include)
+    ament_export_libraries(${CT_MODELS_LIBRARIES})
+    ament_export_targets(export_ct_models)
+    
+    # Export dependencies
+    ament_export_dependencies(
+        ct_rbd
+        Boost
+    )
+    
+    # This must be the last ament macro called
+    ament_package()
 endif()
 
 

@@ -1,4 +1,6 @@
-<package format="2">
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>ct_core</name>
   <version>3.0.2</version>
   <description>
@@ -10,11 +12,22 @@
   <maintainer email="markusgft@gmail.com">Markus Giftthaler</maintainer>
   <license>BSD-2</license>
 
-  <buildtool_depend>cmake</buildtool_depend>
+  <!-- Build tool dependencies -->
+  <buildtool_depend condition="$ROS_VERSION == 1">cmake</buildtool_depend>
+  <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>
+  
+  <!-- Runtime dependencies -->
   <depend>eigen</depend>
-  <exec_depend>catkin</exec_depend>  <!-- ROS compatibility-->
-
-  <export>    <!-- Specify that this is not a ROS package-->
-    <build_type>cmake</build_type>
+  
+  <!-- ROS1-specific dependencies -->
+  <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
+  
+  <!-- Export section -->
+  <export>
+    <!-- ROS1 exports -->
+    <build_type condition="$ROS_VERSION == 1">cmake</build_type>
+    
+    <!-- ROS2 exports -->
+    <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
   </export>
 </package>

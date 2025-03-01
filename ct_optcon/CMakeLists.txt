@@ -1,4 +1,16 @@
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required(VERSION 3.5)
+
+# Determine if we're being built with colcon/ROS2
+if(DEFINED ENV{AMENT_PREFIX_PATH})
+  set(USING_AMENT TRUE)
+else()
+  set(USING_AMENT FALSE)
+endif()
+
+# If using ament, find ament package
+if(USING_AMENT)
+  find_package(ament_cmake REQUIRED)
+endif()
 
 if(NOT TARGET clang-format)
 	include(${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/compilerSettings.cmake)
@@ -19,7 +31,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
 ## find and include required dependencies
 if(NOT TARGET ${ct_core})
-	find_package(ct_core REQUIRED)
+	if(USING_AMENT)
+		find_package(ct_core REQUIRED)
+	else()
+		find_package(ct_core REQUIRED)
+	endif()
 endif()
 # extract interface compile definitions from ct_core as options
 importInterfaceCompileDefinitionsAsOptions(ct_core)
@@ -86,27 +102,6 @@ if(IPOPT_FOUND)
 endif()
 
 
-## include SNOPT -- todo SNOPT not tested in version 3.0.2, temporarily deactivated
-#set(SNOPT_TARGET "")
-#if(DEFINED ENV{SNOPT_SOURCE_DIR})
-#    set(BUILD_WITH_SNOPT_SUPPORT ON)
-#    message(STATUS "Found SNOPT - building with SNOPT support")
-#    include_directories( "$ENV{SNOPT_SOURCE_DIR}/include")
-#
-#    list(APPEND ct_optcon_COMPILE_DEFINITIONS BUILD_WITH_SNOPT_SUPPORT)
-#    find_library(SNOPT_LIBRARY1 snopt7_cpp   $ENV{SNOPT_SOURCE_DIR}/lib REQUIRED)
-#    find_library(SNOPT_LIBRARY2 snopt7       $ENV{SNOPT_SOURCE_DIR}/lib REQUIRED)
-#    set(SNOPT_LIBS ${SNOPT_LIBRARY1} ${SNOPT_LIBRARY2})
-#
-#    add_library(ct_snopt_interface src/nlp/solver/SnoptSolver.cpp)
-#    target_link_libraries(ct_snopt_interface ${SNOPT_LIBRARY1} ${SNOPT_LIBRARY2})
-#
-#    list(APPEND SNOPT_TARGET ct_snopt_interface)
-#    list(APPEND SNOPT_LIBS ct_snopt_interface ${SNOPT_LIBRARY1} ${SNOPT_LIBRARY2})
-#
-#endif(DEFINED ENV{SNOPT_SOURCE_DIR})
-
-
 ###################
 # BUILD LIBRARIES #
 ###################
@@ -157,7 +152,6 @@ target_link_libraries(ct_optcon INTERFACE
     ${LAPACK_LIBS}
     ${HPIPM_LIBS}
     ${IPOPT_LIBS}
-    #${SNOPT_LIBS}
     ${PRESPEC_LIB_NAMES}
     )
 
@@ -176,46 +170,75 @@ endif()
 ###########
 
 if(BUILD_TESTS)
-    #find_package(GTest QUIET)
     enable_testing()
     add_subdirectory(test)
 endif()
 
 
-#################
-# INSTALLATION  #
-#################
+##########################################
+# INSTALLATION - TRADITIONAL CMAKE BUILD #
+##########################################
+if(NOT USING_AMENT)
+    # for correct libraries locations across platforms
+    include(GNUInstallDirs)
 
-# for correct libraries locations across platforms
-include(GNUInstallDirs)
+    ## copy the header files
+    install(DIRECTORY include/ct/optcon DESTINATION include/ct)
 
-## copy the header files
-install(DIRECTORY include/ct/optcon DESTINATION include/ct)
+    ## copy the cmake files required for find_package()
+    install(FILES "cmake/ct_optconConfig.cmake" DESTINATION "share/ct_optcon/cmake")
 
-## copy the cmake files required for find_package()
-install(FILES "cmake/ct_optconConfig.cmake" DESTINATION "share/ct_optcon/cmake")
+    ## install library and targets
+    install(
+        TARGETS ct_optcon ${PRESPEC_LIB_NAMES}
+        EXPORT ct_optcon_export
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        )
 
-## install library and targets
-install(
-    TARGETS ct_optcon ${PRESPEC_LIB_NAMES}
-    EXPORT ct_optcon_export
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ## create the ct_optcon.cmake file which holds target includes and dependencies
+    install(EXPORT ct_optcon_export DESTINATION share/ct_optcon/cmake)
+
+    ## add uninstall target
+    if(NOT TARGET uninstall)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/cmake_uninstall.cmake.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake"
+            IMMEDIATE @ONLY)
+
+        add_custom_target(uninstall
+            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake)
+    endif()
+
+###############################
+# INSTALLATION - AMENT/COLCON #
+###############################
+else()
+    # Install header files for ROS2
+    install(DIRECTORY include/ct/optcon DESTINATION include/ct)
+
+    # Install libraries for ROS2
+    install(
+        TARGETS ct_optcon ${PRESPEC_LIB_NAMES}
+        EXPORT export_ct_optcon
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
     )
 
-## create the ct_optcon.cmake file which holds target includes and dependencies
-install (EXPORT ct_optcon_export DESTINATION share/ct_optcon/cmake)
-
-## add uninstall target
-if(NOT TARGET uninstall)
-    configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/cmake_uninstall.cmake.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake"
-        IMMEDIATE @ONLY)
-
-    add_custom_target(uninstall
-        COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake)
+    # Export dependencies for downstream packages
+    ament_export_include_directories(include)
+    ament_export_libraries(ct_optcon ${PRESPEC_LIB_NAMES})
+    ament_export_targets(export_ct_optcon)
+    
+    # Export dependencies
+    ament_export_dependencies(
+        ct_core
+    )
+    
+    # This must be the last ament macro called
+    ament_package()
 endif()
 
 

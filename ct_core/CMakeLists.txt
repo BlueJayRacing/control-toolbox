@@ -1,18 +1,28 @@
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required(VERSION 3.5)
 
+# Determine if we're being built with colcon/ROS2
+if(DEFINED ENV{AMENT_PREFIX_PATH})
+  set(USING_AMENT TRUE)
+else()
+  set(USING_AMENT FALSE)
+endif()
+
+# If using ament, find ament package
+if(USING_AMENT)
+  find_package(ament_cmake REQUIRED)
+endif()
+
+# Include existing CMake configs
 include(${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/compilerSettings.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/explicitTemplateHelpers.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/clang-cxx-dev-tools.cmake)
 
-
 project(ct_core VERSION 3.0.2 LANGUAGES CXX)
-
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -pthread -std=c++14 -Wall -Wfatal-errors")
 set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -pthread -std=c++14 -Wall -Wfatal-errors")
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
-
 
 set(ct_core_LIBS "")
 
@@ -164,12 +174,6 @@ endif()
 ###########
 # TESTING #
 ###########
-## requires gtest to be installed, e.g. via
-## sudo apt install libgtest-dev
-## cd /usr/src/gtest/
-## sudo cmake -DBUILD_SHARED_LIBS=ON
-## sudo make
-## sudo cp *.so /usr/lib
 if(BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()
@@ -177,46 +181,76 @@ if(BUILD_TESTS)
 endif()
 
 
-#################
-# INSTALLATION  #
-#################
+##########################################
+# INSTALLATION - TRADITIONAL CMAKE BUILD #
+##########################################
+if(NOT USING_AMENT)
+    # for correct libraries locations across platforms
+    include(GNUInstallDirs)
 
-# for correct libraries locations across platforms
-include(GNUInstallDirs)
+    ## copy the header files
+    install(DIRECTORY include/ct/core DESTINATION include/ct)
+    install(DIRECTORY examples/include/ct/core DESTINATION include/ct)
 
-## copy the header files
-install(DIRECTORY include/ct/core DESTINATION include/ct)
-install(DIRECTORY examples/include/ct/core DESTINATION include/ct)
+    ## copy the cmake files required for find_package()
+    install(FILES "cmake/ct_coreConfig.cmake" DESTINATION "share/ct_core/cmake")
 
-## copy the cmake files required for find_package()
-install(FILES "cmake/ct_coreConfig.cmake" DESTINATION "share/ct_core/cmake")
+    ## install library and targets
+    install(
+        TARGETS ct_core ct_plot ${PRESPEC_LIB_NAMES}
+        EXPORT ct_core_export
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        )
 
-## install library and targets
-install(
-    TARGETS ct_core ct_plot ${PRESPEC_LIB_NAMES}
-    EXPORT ct_core_export
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ## create the ct_core.cmake file which holds target includes and dependencies
+    install(EXPORT ct_core_export DESTINATION share/ct_core/cmake)
+
+    ## add uninstall target
+    if(NOT TARGET uninstall)
+        configure_file(
+            "${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/cmake_uninstall.cmake.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake"
+            IMMEDIATE @ONLY)
+
+        add_custom_target(uninstall
+            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake)
+    endif()
+
+###############################
+# INSTALLATION - AMENT/COLCON #
+###############################
+else()
+    # Install header files for ROS2
+    install(DIRECTORY include/ct/core DESTINATION include/ct)
+    install(DIRECTORY examples/include/ct/core DESTINATION include/ct)
+
+    # Install libraries for ROS2
+    install(
+        TARGETS ct_core ct_plot ${PRESPEC_LIB_NAMES}
+        EXPORT export_ct_core
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
     )
 
-## create the ct_core.cmake file which holds target includes and dependencies
-install (EXPORT ct_core_export DESTINATION share/ct_core/cmake)
-
-## add uninstall target
-if(NOT TARGET uninstall)
-    configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/../ct/cmake/cmake_uninstall.cmake.in"
-        "${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake"
-        IMMEDIATE @ONLY)
-
-    add_custom_target(uninstall
-        COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/../ct/cmake/cmake_uninstall.cmake)
+    # Export dependencies for downstream packages
+    ament_export_include_directories(include)
+    ament_export_libraries(ct_core ct_plot ${PRESPEC_LIB_NAMES})
+    ament_export_targets(export_ct_core)
+    
+    # Install CMake config for ament
+    ament_export_dependencies(
+        Eigen3
+        Boost
+    )
+    
+    # This must be the last ament macro called
+    ament_package()
 endif()
-
 
 #################
 # DOCUMENTATION #
 #################
 add_subdirectory(doc)
-
